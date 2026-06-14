@@ -75,7 +75,15 @@ esac
 REPO="${1:-}"
 
 if [ -n "$REPO" ]; then
-  # Per-repo session. Validate the directory exists inside the container.
+  # Per-repo session. Reject anything but a plain directory name so a repo arg
+  # cannot escape the workspace root (e.g. "../foo" or an absolute path).
+  case "$REPO" in
+    /* | *"/"* | "." | "..")
+      echo "Repo must be a single directory name under $WORKDIR." >&2
+      exit 1
+      ;;
+  esac
+  # Validate the directory exists inside the container.
   if ! docker exec "$CONTAINER" test -d "$WORKDIR/$REPO"; then
     echo "Repo '$REPO' not found under $WORKDIR in container '$CONTAINER'." >&2
     echo >&2

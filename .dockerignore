@@ -7,3 +7,5 @@ data
 cc-workspace
 .tmp
 *.md
+# Re-include the guidance file the entrypoint seeds into the config dir.
+!sandbox-CLAUDE.md

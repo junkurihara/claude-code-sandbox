@@ -1,6 +1,8 @@
 #!/bin/bash
 set -euo pipefail
-IFS=$'\n\t'
+# Space is included so `read -a` can split space-separated override env vars
+# (CLAUDE_REQUIRED_DOMAINS / CLAUDE_OPTIONAL_DOMAINS) into arrays.
+IFS=$' \n\t'
 
 # 1. Extract Docker DNS info BEFORE any flushing
 DOCKER_DNS_RULES=$(iptables-save -t nat | grep "127\.0\.0\.11" || true)
@@ -31,8 +33,12 @@ else
     echo "No Docker DNS rules to restore"
 fi
 
+# DNS: allow both UDP and TCP/53 (large responses and truncated answers fall back
+# to TCP). INPUT is restricted to ESTABLISHED replies rather than any sport 53.
 iptables -A OUTPUT -p udp --dport 53 -j ACCEPT
-iptables -A INPUT -p udp --sport 53 -j ACCEPT
+iptables -A INPUT -p udp --sport 53 -m state --state ESTABLISHED -j ACCEPT
+iptables -A OUTPUT -p tcp --dport 53 -j ACCEPT
+iptables -A INPUT -p tcp --sport 53 -m state --state ESTABLISHED -j ACCEPT
 iptables -A OUTPUT -p tcp --dport 22 -j ACCEPT
 iptables -A INPUT -p tcp --sport 22 -m state --state ESTABLISHED -j ACCEPT
 iptables -A INPUT -i lo -j ACCEPT
@@ -91,35 +97,55 @@ resolve_and_add() {
 }
 
 # ---- Required domains: abort if they cannot be resolved ----
-#   Essential for Claude Code core (inference), package fetching, and Rust development
-for domain in \
-    "api.anthropic.com" \
-    "registry.npmjs.org" \
-    "crates.io" \
-    "static.crates.io" \
-    "index.crates.io"; do
+#   Essential for Claude Code core (inference), package fetching, and Rust development.
+#   Override with the CLAUDE_REQUIRED_DOMAINS env var (space-separated).
+if [ -n "${CLAUDE_REQUIRED_DOMAINS:-}" ]; then
+    read -r -a REQUIRED_DOMAINS <<< "$CLAUDE_REQUIRED_DOMAINS"
+else
+    REQUIRED_DOMAINS=(
+        api.anthropic.com
+        registry.npmjs.org
+        crates.io
+        static.crates.io
+        index.crates.io
+    )
+fi
+
+# ---- Optional domains: skip and continue if they cannot be resolved ----
+#   Telemetry / error reporting. Not essential to core operation, so resolution
+#   failures are tolerated. Override with CLAUDE_OPTIONAL_DOMAINS (space-separated).
+if [ -n "${CLAUDE_OPTIONAL_DOMAINS:-}" ]; then
+    read -r -a OPTIONAL_DOMAINS <<< "$CLAUDE_OPTIONAL_DOMAINS"
+else
+    OPTIONAL_DOMAINS=(
+        sentry.io
+        statsig.anthropic.com
+        statsig.com
+    )
+fi
+
+for domain in "${REQUIRED_DOMAINS[@]}"; do
     resolve_and_add "$domain" "required"
 done
 
-# ---- Optional domains: skip and continue if they cannot be resolved ----
-#   Telemetry / error reporting. Not essential to core operation, so resolution failures are tolerated
-for domain in \
-    "sentry.io" \
-    "statsig.anthropic.com" \
-    "statsig.com"; do
+for domain in "${OPTIONAL_DOMAINS[@]}"; do
     resolve_and_add "$domain" "optional"
 done
 
-# ---- Allow the host network ----
-HOST_IP=$(ip route | grep default | cut -d" " -f3)
-if [ -z "$HOST_IP" ]; then
-    echo "ERROR: Failed to detect host IP"
-    exit 1
+# ---- Allow the host network (toggle with CLAUDE_ALLOW_HOST_NETWORK=0) ----
+# Lets the container reach other services on the host's /24. Set to 0 to keep the
+# container isolated from the local network.
+if [ "${CLAUDE_ALLOW_HOST_NETWORK:-1}" = "1" ]; then
+    HOST_IP=$(ip route | grep default | cut -d" " -f3)
+    if [ -z "$HOST_IP" ]; then
+        echo "ERROR: Failed to detect host IP"
+        exit 1
+    fi
+    HOST_NETWORK=$(echo "$HOST_IP" | sed "s/\.[0-9]*$/.0\/24/")
+    echo "Host network detected as: $HOST_NETWORK"
+    iptables -A INPUT -s "$HOST_NETWORK" -j ACCEPT
+    iptables -A OUTPUT -d "$HOST_NETWORK" -j ACCEPT
 fi
-HOST_NETWORK=$(echo "$HOST_IP" | sed "s/\.[0-9]*$/.0\/24/")
-echo "Host network detected as: $HOST_NETWORK"
-iptables -A INPUT -s "$HOST_NETWORK" -j ACCEPT
-iptables -A OUTPUT -d "$HOST_NETWORK" -j ACCEPT
 
 # ---- Default DROP; allow only the allowlisted set ----
 iptables -P INPUT DROP
@@ -145,4 +171,10 @@ if ! curl --connect-timeout 5 https://api.github.com/zen >/dev/null 2>&1; then
     exit 1
 else
     echo "Firewall verification passed - able to reach https://api.github.com as expected"
+fi
+if ! curl --connect-timeout 5 https://api.anthropic.com >/dev/null 2>&1; then
+    echo "ERROR: Firewall verification failed - unable to reach https://api.anthropic.com"
+    exit 1
+else
+    echo "Firewall verification passed - able to reach https://api.anthropic.com as expected"
 fi

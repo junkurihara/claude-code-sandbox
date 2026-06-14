@@ -14,8 +14,10 @@ SSH disconnects and terminal closes.
   allowlist (GitHub IP ranges, `api.anthropic.com`, npm, crates.io, and a few
   optional telemetry domains). See [Firewall](#firewall) for caveats.
 - **Persistent state via bind mounts.** Workspace, Claude config, and shell
-  history live on the host, so they survive container recreation and
+  history (zsh) live on the host, so they survive container recreation and
   `docker system prune --volumes`.
+- **Seeded defaults.** On first start the entrypoint copies a default `CLAUDE.md`
+  and `settings.json` into the config dir if they are not already present.
 - **Preinstalled toolchain.** Node (LTS via `n`), Rust (rustup, stable, with
   `clippy` and `rustfmt`), tmux, zsh, and common CLI tools.
 
@@ -29,6 +31,10 @@ SSH disconnects and terminal closes.
 ## Quick start
 
 ```sh
+# Create the host-side bind-mount directories first (so Docker does not create
+# them as root-owned).
+mkdir -p cc-workspace data/claude data/history
+
 # Build and start the container in the background.
 docker compose up -d
 
@@ -38,6 +44,9 @@ docker compose up -d
 # Attach to (or create) a per-repo tmux session, then run `claude` inside.
 ./bin/cc my-repo
 ```
+
+On first start the container seeds a default `CLAUDE.md` and `settings.json` into
+the config dir (see [Default guidance and settings](#default-guidance-and-settings)).
 
 Detach from tmux with the prefix `Ctrl-Space` then `d`. The session keeps
 running inside the container; re-run `./bin/cc my-repo` to reattach.
@@ -90,6 +99,27 @@ opens a session rooted at the matching `/workspace/<repo>`.
 > **Do not commit `data/`.** It contains Claude credentials. It is listed in
 > `.gitignore`.
 
+## Default guidance and settings
+
+The image bundles `sandbox-CLAUDE.md` and `sandbox-settings.json`. On first start
+the entrypoint copies them into the config dir (bind-mounted from `./data/claude`):
+
+- `sandbox-CLAUDE.md` → `/home/dev/.claude/CLAUDE.md`
+- `sandbox-settings.json` → `/home/dev/.claude/settings.json`
+
+Existing files are **never overwritten**, so your own edits survive container
+recreation. `settings.json` sets a conservative permission policy: destructive git,
+GitHub mutation, `sudo`, recursive `chmod`/`chown`, and recursive deletes are
+denied; broad reads/deletes/moves prompt; routine build/test/inspection commands
+are allowed; secret files (`.env`, `*.pem`, credentials, SSH keys) are blocked.
+
+To apply updated bundled defaults after the first start, copy them from the host:
+
+```sh
+cp sandbox-CLAUDE.md data/claude/CLAUDE.md
+cp sandbox-settings.json data/claude/settings.json
+```
+
 ## Updating
 
 [watchtower](https://github.com/nicholas-fedor/watchtower) updates a container
@@ -141,7 +171,23 @@ yourself with `docker compose up -d`.
   If an upstream IP rotates (e.g. `api.anthropic.com`), connectivity can break
   until the container is restarted and the firewall re-runs.
 - Allows the host's `/24` network, so the container can reach other services on
-  the local network. Tighten this if that is not desired.
+  the local network. Set `CLAUDE_ALLOW_HOST_NETWORK=0` to keep the container
+  isolated from the local network.
+- Verifies that `https://example.com` is blocked while GitHub and
+  `api.anthropic.com` are reachable, and aborts otherwise.
+
+The allowlisted domains can be overridden without rebuilding by setting
+space-separated env vars in `docker-compose.yml`:
+
+```yaml
+environment:
+  CLAUDE_REQUIRED_DOMAINS: "api.anthropic.com registry.npmjs.org crates.io static.crates.io index.crates.io"
+  CLAUDE_OPTIONAL_DOMAINS: "sentry.io statsig.anthropic.com statsig.com"
+  CLAUDE_ALLOW_HOST_NETWORK: "1"
+```
+
+Required domains abort the firewall on resolution failure; optional ones are
+skipped with a warning.
 
 ### Installing extra packages
 
@@ -185,7 +231,8 @@ traceability.
 
 Docker Hub push requires two repository secrets: `DOCKERHUB_USERNAME` and
 `DOCKERHUB_TOKEN` (a Docker Hub access token). GHCR uses the built-in
-`GITHUB_TOKEN`.
+`GITHUB_TOKEN`. Set the repository variable `DOCKERHUB_IMAGE` to override the
+Docker Hub image name (defaults to `jqtype/claude-code-sandbox`).
 
 ## Configuration
 

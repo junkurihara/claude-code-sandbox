@@ -41,9 +41,11 @@ RUN curl -fsSL https://raw.githubusercontent.com/tj/n/master/bin/n -o /usr/local
 # Install Claude Code globally via npm
 RUN npm install -g @anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}
 
-# Work/config directories (mount points for the bind mounts)
-RUN mkdir -p /workspace /home/${USERNAME}/.claude /commandhistory && \
-  touch /commandhistory/.bash_history && \
+# Work/config directories (mount points for the bind mounts) plus the share dir
+# holding the default guidance/settings the entrypoint seeds on first start.
+RUN mkdir -p /workspace /home/${USERNAME}/.claude /commandhistory \
+  /usr/local/share/claude-code-sandbox && \
+  touch /commandhistory/.zsh_history && \
   chown -R ${USER_UID}:${USER_GID} /workspace /home/${USERNAME}/.claude /commandhistory
 
 # Firewall script
@@ -61,7 +63,16 @@ RUN chmod +x /usr/local/bin/wt-preupdate
 COPY install-tools.sh /usr/local/bin/install-tools
 RUN chmod +x /usr/local/bin/install-tools
 
-# tmux config: set the prefix to Ctrl-Space (does not clash with emacs-style keybindings)
+# Entrypoint (runs the firewall, seeds defaults, then sleeps) plus the default
+# guidance/settings it seeds into the config dir on first start.
+COPY entrypoint.sh /usr/local/bin/claude-code-sandbox-entrypoint
+COPY sandbox-CLAUDE.md /usr/local/share/claude-code-sandbox/sandbox-CLAUDE.md
+COPY sandbox-settings.json /usr/local/share/claude-code-sandbox/sandbox-settings.json
+RUN chmod +x /usr/local/bin/claude-code-sandbox-entrypoint
+
+# tmux config: set the prefix to Ctrl-Space (does not clash with emacs-style keybindings).
+# zsh config: persist history into the bind-mounted /commandhistory so it survives
+# container recreation (the shell is zsh, so a bash_history alone is never written).
 RUN printf '%s\n' \
   'unbind C-b' \
   'set -g prefix C-Space' \
@@ -70,12 +81,19 @@ RUN printf '%s\n' \
   'set -g history-limit 50000' \
   'setw -g mode-keys emacs' \
   > /home/${USERNAME}/.tmux.conf && \
-  chown ${USER_UID}:${USER_GID} /home/${USERNAME}/.tmux.conf
+  printf '%s\n' \
+  'export HISTFILE=/commandhistory/.zsh_history' \
+  'export SAVEHIST=50000' \
+  'export HISTSIZE=50000' \
+  'setopt APPEND_HISTORY SHARE_HISTORY HIST_IGNORE_DUPS' \
+  > /home/${USERNAME}/.zshrc && \
+  chown ${USER_UID}:${USER_GID} /home/${USERNAME}/.tmux.conf /home/${USERNAME}/.zshrc
 
 ENV DEVCONTAINER=true \
   SHELL=/bin/zsh \
   EDITOR=nano \
-  CLAUDE_CONFIG_DIR=/home/${USERNAME}/.claude
+  CLAUDE_CONFIG_DIR=/home/${USERNAME}/.claude \
+  HISTFILE=/commandhistory/.zsh_history
 
 # --- Switch to non-root. Install Rust into the user environment (rustup) ---
 USER ${USERNAME}
@@ -87,3 +105,6 @@ RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
 ENV PATH="/home/${USERNAME}/.cargo/bin:${PATH}"
 
 WORKDIR /workspace
+
+# Locks down egress, seeds default guidance/settings on first start, then sleeps.
+ENTRYPOINT ["/usr/local/bin/claude-code-sandbox-entrypoint"]

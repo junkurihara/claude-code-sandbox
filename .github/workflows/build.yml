@@ -12,7 +12,7 @@ on:
   workflow_dispatch:
 
 env:
-  DOCKERHUB_IMAGE: jqtype/claude-code-sandbox
+  DOCKERHUB_IMAGE: ${{ vars.DOCKERHUB_IMAGE || 'jqtype/claude-code-sandbox' }}
   GHCR_IMAGE: ghcr.io/${{ github.repository_owner }}/claude-code-sandbox
 
 jobs:

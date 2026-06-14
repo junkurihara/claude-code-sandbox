@@ -33,6 +33,7 @@ services:
     environment:
       NODE_OPTIONS: "--max-old-space-size=4096"
       CLAUDE_CONFIG_DIR: /home/dev/.claude
+      HISTFILE: /commandhistory/.zsh_history
     logging:
       options:
         max-size: "10m"
@@ -43,4 +44,5 @@ services:
       - ./cc-workspace:/workspace:delegated
       - ./data/claude:/home/dev/.claude
       - ./data/history:/commandhistory
-    entrypoint: ["/bin/sh", "-c", "sudo /usr/local/bin/init-firewall.sh && sleep infinity"]
+    # The image's ENTRYPOINT runs the firewall, seeds default CLAUDE.md/settings.json
+    # on first start, then sleeps. See entrypoint.sh.
