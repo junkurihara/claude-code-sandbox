@@ -18,8 +18,9 @@ SSH disconnects and terminal closes.
   `docker system prune --volumes`.
 - **Seeded defaults.** On first start the entrypoint copies a default `CLAUDE.md`
   and `settings.json` into the config dir if they are not already present.
-- **Preinstalled toolchain.** Node (LTS via `n`), Rust (rustup, stable, with
-  `clippy` and `rustfmt`), tmux, zsh, and common CLI tools.
+- **Preinstalled toolchain.** Claude Code (official native binary), Node (LTS
+  via `n`), Rust (rustup, stable, with `clippy` and `rustfmt`), tmux, zsh, and
+  common CLI tools.
 
 ## Prerequisites
 
@@ -224,10 +225,14 @@ Notes:
 
 It runs on push to `main`, on `v*` tags, on manual dispatch, and **daily on a
 schedule** to pick up new Claude Code releases. The workflow resolves the latest
-published `@anthropic-ai/claude-code` version from npm and passes it as a
-concrete `CLAUDE_CODE_VERSION` build arg, so the build cache is busted only when
-a new version actually exists. Each image is also tagged `cc-<version>` for
-traceability.
+published Claude Code version from the npm registry for release discovery, then
+passes it to the official native installer as a concrete
+`CLAUDE_CODE_VERSION` build arg. This busts the build cache only when a new
+version exists. Each image is also tagged `cc-<version>` for traceability.
+
+Claude Code's in-container auto-updater is disabled. Updates are applied by the
+scheduled image build and container replacement, keeping the installed version
+consistent with the image's `cc-<version>` tag.
 
 Docker Hub push requires two repository secrets: `DOCKERHUB_USERNAME` and
 `DOCKERHUB_TOKEN` (a Docker Hub access token). GHCR uses the built-in
@@ -238,9 +243,9 @@ Docker Hub image name (defaults to `jqtype/claude-code-sandbox`).
 
 Build args (set in `docker-compose.yml`):
 
-| Arg                   | Default      | Description                |
-| --------------------- | ------------ | -------------------------- |
-| `TZ`                  | `Asia/Tokyo` | Container timezone         |
-| `CLAUDE_CODE_VERSION` | `latest`     | npm version of Claude Code |
-| `USER_UID`            | `1000`       | uid of the `dev` user      |
-| `USER_GID`            | `1000`       | gid of the `dev` user      |
+| Arg                   | Default      | Description                                 |
+| --------------------- | ------------ | ------------------------------------------- |
+| `TZ`                  | `Asia/Tokyo` | Container timezone                          |
+| `CLAUDE_CODE_VERSION` | `latest`     | Native installer version or release channel |
+| `USER_UID`            | `1000`       | uid of the `dev` user                       |
+| `USER_GID`            | `1000`       | gid of the `dev` user                       |

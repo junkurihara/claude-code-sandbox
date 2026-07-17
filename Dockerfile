@@ -38,9 +38,6 @@ RUN curl -fsSL https://raw.githubusercontent.com/tj/n/master/bin/n -o /usr/local
   n ${NODE_VERSION} && \
   npm install -g npm@latest
 
-# Install Claude Code globally via npm
-RUN npm install -g @anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}
-
 # Work/config directories (mount points for the bind mounts) plus the share dir
 # holding the default guidance/settings the entrypoint seeds on first start.
 RUN mkdir -p /workspace /home/${USERNAME}/.claude /commandhistory \
@@ -90,19 +87,28 @@ RUN printf '%s\n' \
   chown ${USER_UID}:${USER_GID} /home/${USERNAME}/.tmux.conf /home/${USERNAME}/.zshrc
 
 ENV DEVCONTAINER=true \
+  HOME=/home/${USERNAME} \
   SHELL=/bin/zsh \
   EDITOR=nano \
   CLAUDE_CONFIG_DIR=/home/${USERNAME}/.claude \
-  HISTFILE=/commandhistory/.zsh_history
+  HISTFILE=/commandhistory/.zsh_history \
+  DISABLE_AUTOUPDATER=1
 
-# --- Switch to non-root. Install Rust into the user environment (rustup) ---
+# --- Switch to non-root. Install Claude Code and Rust into the user environment. ---
 USER ${USERNAME}
 WORKDIR /home/${USERNAME}
+
+# Install the official Claude Code native binary. The image build is the update
+# boundary, so in-container auto-updates are disabled above.
+RUN curl -fsSL https://claude.ai/install.sh -o /tmp/install-claude.sh && \
+  bash /tmp/install-claude.sh "${CLAUDE_CODE_VERSION}" && \
+  rm -f /tmp/install-claude.sh && \
+  /home/${USERNAME}/.local/bin/claude --version
 
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
   | sh -s -- -y --default-toolchain stable --profile minimal \
   --component clippy --component rustfmt
-ENV PATH="/home/${USERNAME}/.cargo/bin:${PATH}"
+ENV PATH="/home/${USERNAME}/.local/bin:/home/${USERNAME}/.cargo/bin:${PATH}"
 
 WORKDIR /workspace
 

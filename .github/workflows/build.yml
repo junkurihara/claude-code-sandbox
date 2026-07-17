@@ -30,8 +30,8 @@ jobs:
 
       - name: Resolve latest Claude Code version
         id: ccver
-        # Pass a concrete version (not "latest") so the npm-install layer's cache
-        # is busted only when a new version is actually published.
+        # Pass a concrete version (not "latest") so the native-install layer's
+        # cache is busted only when a new version is actually published.
         run: echo "version=$(npm view @anthropic-ai/claude-code version)" >> "$GITHUB_OUTPUT"
 
       - name: Log in to Docker Hub
