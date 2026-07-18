@@ -77,25 +77,26 @@ These rules protect the user's local environment, machine state, and shared/remo
 ### Development Style
 
 - **The `.tmp/` working directory must be created at the root of the repository you are working on** (e.g. `/workspace/<repo>/.tmp/`), **never directly under `/workspace/`**. Each repository has its own independent `.tmp/`; do not read or write the `.tmp/` of a repository you are not working on.
-- **Requirements and design for each task must be documented in `<repo>/.tmp/design.md`.**
-- **Detailed sub-tasks for each main task must be defined in `<repo>/.tmp/task.md`.**
-- **You must update `.tmp/task.md` as you make progress on your work.**
+- **Requirements and design for each task must be documented in `<repo>/.tmp/design-claude-<topic>.md`.**
+- **Detailed sub-tasks for each main task must be defined in `<repo>/.tmp/task-<topic>.md`.**
+- **You must update `.tmp/task-<topic>.md` as you make progress on your work.**
+- **File naming convention:** `<topic>` is a short kebab-case summary of the task. Design documents are named per author agent (Claude Code writes `design-claude-<topic>.md`; other agents such as Codex write `design-codex-<topic>.md`), so that designs for the same topic can coexist and be cross-reviewed without overwriting each other. The task file `task-<topic>.md` is **shared per topic** regardless of which agent is working: when roles are switched or handed off, continue updating the same task file instead of creating an agent-specific copy.
 - The `.tmp/` directory is **git-ignored** and must not be committed; it is working memory, not part of the repository. Externally provided documents (design notes, performance reports) may be placed under `.tmp/` (e.g. `.tmp/incoming/`) by the user; treat them as read-only inputs.
-- **Exception for trivial changes:** The `.tmp/design.md` / `.tmp/task.md` workflow is required for non-trivial work only. Single-line fixes, typo corrections, simple Q&A, formatter-only changes, and small configuration tweaks may skip this step.
-- **Check for a pre-existing `.tmp/design.md` or `.tmp/task.md` in the repository you are working on before starting any non-trivial work.** Use the `Bash` tool (the `List` tool may not surface hidden directories). If either file exists:
-  1. **Do not overwrite, modify, or delete them** as a first action. They may represent in-progress work by the user or another agent (e.g. a parallel Claude Code session working on the same repository, a remote agent, or a scheduled routine).
+- **Exception for trivial changes:** The `.tmp/design-claude-<topic>.md` / `.tmp/task-<topic>.md` workflow is required for non-trivial work only. Single-line fixes, typo corrections, simple Q&A, formatter-only changes, and small configuration tweaks may skip this step.
+- **Check for pre-existing `.tmp/design-*.md` or `.tmp/task-*.md` files in the repository you are working on before starting any non-trivial work.** This includes design documents authored by other agents (e.g. `design-codex-<topic>.md`). Use the `Bash` tool (the `List` tool may not surface hidden directories). If a file related to your topic exists:
+  1. **Do not overwrite, modify, or delete them** as a first action. They may represent in-progress work by the user or another agent (e.g. a parallel Claude Code session working on the same repository, a Codex session that designed the task, a remote agent, or a scheduled routine).
   2. Read the contents and summarize them to the user in the conversation language: what the design describes, which tasks are checked off, which remain, and the apparent current state.
-  3. Ask the user explicitly how to proceed -- for example: continue the existing plan, start a new plan after archiving the old one, or hand off because another agent is still working on it. Wait for the user's instruction before writing to either file.
+  3. Ask the user explicitly how to proceed -- for example: continue the existing plan (a shared `task-<topic>.md` handed off from another agent is the normal case when switching roles), start a new plan after archiving the old one, or hand off because another agent is still working on it. Wait for the user's instruction before writing to either file.
 
-1.  First, create a plan and document the requirements in `<repo>/.tmp/design.md`.
-2.  Based on the requirements, identify all necessary tasks and list them in `<repo>/.tmp/task.md`.
-3.  Once the plan is established, create a new branch and begin your work.
+1. First, create a plan and document the requirements in `<repo>/.tmp/design-claude-<topic>.md`.
+2. Based on the requirements, identify all necessary tasks and list them in `<repo>/.tmp/task-<topic>.md`.
+3. Once the plan is established, create a new branch and begin your work.
     - Branch names should start with `feat/` followed by a brief summary of the task.
-4.  Break down tasks into small, manageable units that can be completed within a single commit.
-5.  Create a checklist for each task to manage its progress.
-6.  Always apply a code formatter to maintain readability.
-7.  **Do not commit your changes.** Report completion and ask the user to review and commit.
-8.  When instructed to create a Pull Request (PR), use the following format:
+4. Break down tasks into small, manageable units that can be completed within a single commit.
+5. Create a checklist for each task to manage its progress.
+6. Always apply a code formatter to maintain readability.
+7. **Do not commit your changes.** Report completion and ask the user to review and commit.
+8. When instructed to create a Pull Request (PR), use the following format:
     - **Title**: A brief summary of the task.
     - **Key Changes**: Describe the changes, points of caution, etc.
     - **Testing**: Specify which tests passed, which tests were added, and clearly state how to run the tests.
